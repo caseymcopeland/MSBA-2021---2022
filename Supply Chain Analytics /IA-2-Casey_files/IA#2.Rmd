@@ -1,0 +1,165 @@
+---
+title : "IA - 2 Casey Copeland" 
+output: html_notebook
+---
+***
+<center>
+## Individual Assignment #2: ARIMA Lab.
+#### Due: Nov. 23 before class time
+#### (40 points)
+</center>
+***
+
+The file titled **US Electricity.csv** includes a time series index compiled by the US Federal Reserve representing total fossil-fuel US electricity generation by all utilities from January 1939 through October 2021.
+
+In the following code box we read the CSV file and set up the data as a *tsibble* and then we plot it and subset it to examine it.
+
+```{r}
+#clear environment
+rm(list = ls())
+```
+
+```{r}
+library(fpp3)
+
+D <- read.csv("US Electricity.csv") %>% 
+  mutate(DATE = yearmonth(DATE)) %>%
+  as_tsibble(index = DATE)
+  
+D %>% autoplot(ELEC)
+
+DR <- D %>% filter(DATE >= yearmonth("2010 Jan"))
+
+DR %>% autoplot(ELEC)
+```
+
+We are interested in developing a two-year long monthly forecast (24 months) for the national electricity production requirements. 
+
+
+1. Examine the stationarity of the **ELEC** time series in the reduced **DR** data, examine also the corresponding ACF and PACF diagrams and propose three plausible ARIMA models to fit the data.
+```{r}
+#stationarity of DR - not stationary, need to add seasonality  
+#ACF and PACF
+DR %>% gg_tsdisplay(ELEC, plot_type = "partial") +
+  labs(title="DR data", y="")
+
+
+#add seasonality
+DR.12 <- DR %>% gg_tsdisplay(difference(ELEC, 12),
+               plot_type='partial', lag=60) +
+  labs(title="Seasonally differenced - 12", y="")
+DR.12
+
+DR.4 <- DR %>% gg_tsdisplay(difference(ELEC, 4),
+               plot_type='partial', lag=60) +
+  labs(title="Seasonally differenced - 4", y="")
+DR.4
+ 
+
+
+```
+DR is not stationary, all of the lags are significant lags in the ACF plot. We need to figure out how many differences to take until it is stationary. PACF shows only 2 very large significant lags at the beginning. Because the ACF is complex, and the PACF dies down slowly, I believe this a Moving Average forecasting model would best suite this data. It also looks like the ACF is showing some seasonality in the lags, as there is a pattern to the spikes. This makes sense as your electricity usage changes as the weather changes. 
+
+The PACF dies down so we will identify this model as a MA(1) or MA(2) seeing if seasonal MA or regular MA results in a better arima model. I think it could possibly be seasonality 4, rather than seasonality 12 as well. 
+1)  ARIMA(1,1,1)(1,1,1) [12]
+2)  ARIMA(1,1,2)(1,1,1) [12]
+3)  ARIMA(1,1,1)(1,1,2) [12] 
+
+2. Using **fable** fit the following five models to the **DR** data: (i)-(iii) the three models you propose in (1), (iv) the automatically selected model by the ARIMA() function, and (v) the automatically selected model by the ETS() function.  Report the name/order of each model and the corresponding AICc and BIC.
+```{r}
+#how many differences it needs
+DR %>% features(ELEC, unitroot_nsdiffs) #seasonal differences needed = 1
+DR %>% features(ELEC,unitroot_ndiffs) #differences needed = 0
+
+fitDR <- DR %>%
+  model( #none of the models worked with d = 0 - HELP
+    arima1 = ARIMA(ELEC ~ pdq(1,1,1) + PDQ(1,1,1)),
+    arima2 = ARIMA(ELEC ~ pdq(1,1,2) + PDQ(1,1,1)),
+    arima3 = ARIMA(ELEC ~ pdq(1,1,1) + PDQ(1,1,2)),
+    auto.arima = ARIMA(ELEC), #100210
+    auto.ETS = ETS(ELEC)) #error("M") + trend("N") + season("A")
+    
+fitDR %>% pivot_longer(everything(), names_to = "Model name",
+                     values_to = "Orders")
+
+glance(fitDR) %>% arrange(AICc) %>% select(.model:BIC)
+```
+
+3. Examine the residuals of all the models using the Ljung-Box test and the **gg_tsresiduals()** function. Is there a validity problem with any of the models?
+
+```{r}
+fitDR %>% augment() %>%
+  features(.resid, ljung_box, lag = 60)
+
+fitDR %>% select(arima1) %>% gg_tsresiduals()
+fitDR %>% select(arima2) %>% gg_tsresiduals()
+fitDR %>% select(arima3) %>% gg_tsresiduals() 
+fitDR %>% select(auto.arima) %>% gg_tsresiduals()
+fitDR %>% select(auto.ETS) %>% gg_tsresiduals()
+```
+
+4. For the set of five models selected (automatically and/or manually)  examine the in-sample accuracy metrics.  Based on a holistic analysis of the information criteria select the best two ARIMA models and the ETS model. Report the model name/order and their parameter values.
+
+For model cross-validation purposes stretch the DR data as follows:
+```{r}
+fitDR %>% accuracy() %>% select(.model, MAPE, RMSE, MAE)
+fitDR %>% glance() %>%
+  select(.model, AIC, AICc, BIC)
+```
+Best 2 arima Models = arima3 ARIMA(1,1,1)(1,1,2) [12]  and arima1 ARIMA(1,1,1)(1,1,1) [12]
+ETS model = Elec ~ error("M") + trend("N") + season("A")
+
+
+5. Fit cross-validation models for each of the time sub-series in the stretched data for each of the four model types selected in (4). In the case(s) where the models were automatically selected, do NOT run the automatic selection under cross validation, instead enter manually the model order/type when you call the ARIMA()/ETS() function. 
+
+```{r}
+#3 or 4 models??
+#kinda takes awhile
+#given code
+DR.CV <- DR %>%
+  filter(DATE >= yearmonth("2010 Jan")) %>%
+  stretch_tsibble(.init = 36, .step = 1)
+
+mC <- DR.CV %>% 
+  model(
+    arima1 = ARIMA(ELEC ~ pdq(0,1,1) + PDQ(0,1,1)),
+    arima2 = ARIMA(ELEC ~ pdq(0,1,2) + PDQ(0,1,1)), #q4 asked for 3 models, but he asked for 4 here so I                                                      included arima2 
+    arima3 = ARIMA(ELEC ~ pdq(0,1,2) + PDQ(0,1,2)),
+    ETS(ELEC ~ error("M") + trend("N") + season("A"))) 
+```
+
+6. Prepare a 24-month ahead forecast foe each of the models fitted in (5) and prepare a plot of MAPE vs months-ahead.  Based on the dynamic behavior of cross-validation MAPE discuss which model(s) should be kept/discarded.
+```{r}
+fCV <- mC %>% 
+  forecast(h = 24) %>% #for each of the 4 model IDs you have 24 forecasts 
+  group_by(.id, .model) %>% #ID of one corresponds to 3 models
+  mutate(h = row_number()) %>% #create variable h for the .id # 
+  ungroup() #forecast cross validation 
+
+fCV %>%
+  accuracy(D, by = c("h", ".model")) %>% #shows you all the CV metrics
+  ggplot(aes(x = h, y = MAPE, color = .model)) +
+  geom_line()
+
+fCV %>%
+  accuracy(D, by = c("h", ".model")) %>%
+  ggplot(aes(x = h, y = RMSE, color = .model)) +
+  geom_line()
+```
+
+7. Examine the cross-validation residuals of the models you selected in (6), and based on their correlation (model vs. model) discuss if it is advisable to prepare an ensemble forecast averaging the forecasts of two or more models.
+```{r}
+DR.CV <- DR %>%
+  filter(DATE >= yearmonth("2010 Jan")) %>%
+  stretch_tsibble(.init = 36, .step = 1)
+
+DR.CV %>% 
+  model(
+    ARIMA(ELEC ~ pdq(0,1,2) + PDQ(0,1,2)),
+    ETS(ELEC ~ error("M") + trend("N") + season("A"))) %>%
+  forecast(h = 24) %>%
+  accuracy(DR) %>%
+  select(.model, RMSE:MAPE)
+```
+
+8. The index is very useful for energy planning purpose as most of the variability and seasonality is produced by combined cycle natural gas plants and single cycle peaker plants that also run on natural gas (i.e., nuclear and coal generation is fixed and relatively constant).  For this purpose it is of interest to know what is the production index level that will not be superated with a probability (service-level) of 95%. For the best model in (6) plot the 24-month ahead forecast and plot the forecast and the corresponding confidence interval to help you address the service level question. Report numerically the month-by-month the index forecasts that meet the desired 95% service level.

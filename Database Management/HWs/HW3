@@ -1,0 +1,144 @@
+-- QUESTION ONE -- SELECT statement with an ORDER BHY
+
+SELECT cardholder_first_name, cardholder_last_name, card_type, expiration_date
+From Customer_Payment;
+
+----- ^^^ run statement ^^^ ------
+
+SELECT cardholder_first_name, cardholder_last_name, card_type, expiration_date
+From Customer_Payment
+ORDER BY expiration_date ASC;
+
+----- ^^^ run statement ^^^ ------
+
+-- QUESTION TWO -- SELECT combining columns || '' || with string operator
+
+SELECT first_name ||' '|| last_name AS customer_full_name
+FROM customer
+WHERE SUBSTR (last_name,1,1) IN ('A', 'B', 'C')
+ORDER BY last_name DESC;
+
+
+-- QUESTION THREE -- WHERE statements
+
+SELECT customer_id, confirmation_nbr, date_created, 
+check_in_date, number_of_guests
+FROM Reservation
+WHERE status = 'U' AND check_in_date >= SYSDATE AND check_in_date <='31-DEC-2021';
+
+
+-- QUESTION FOUR PT A --
+
+SELECT customer_id, confirmation_nbr, date_created, check_in_date, number_of_guests
+FROM Reservation
+WHERE status = 'U' AND check_in_date BETWEEN SYSDATE AND '31-DEC-2021';
+
+
+-- QUESTION FOUR PT B --
+
+SELECT customer_id, confirmation_nbr, date_created, check_in_date, number_of_guests
+FROM Reservation
+WHERE status = 'U' AND check_in_date >= SYSDATE AND check_in_date <='31-DEC-2021'
+MINUS 
+SELECT customer_id, confirmation_nbr, date_created, check_in_date, number_of_guests
+FROM Reservation
+WHERE status = 'U' AND check_in_date BETWEEN SYSDATE AND '31-DEC-2021';
+
+
+-- QUESTION FIVE --
+
+SELECT customer_id, location_id, (check_out_date - check_in_date) AS length_of_stay
+FROM Reservation WHERE status = 'C' AND ROWNUM <= 10
+ORDER BY length_of_stay DESC, customer_id;
+
+
+-- QUESTION SIX --
+
+SELECT first_name, last_name, email, (stay_credits_earned - stay_credits_used) AS credits_available
+FROM Customer WHERE (stay_credits_earned - stay_credits_used) >= 10
+ORDER BY credits_available;
+
+
+-- QUESTION SEVEN -- 
+
+SELECT cardholder_first_name, cardholder_mid_name, cardholder_last_name
+FROM Customer_Payment WHERE cardholder_mid_name IS NOT NULL
+ORDER BY 2,3;
+
+-- QUESTION EIGHT --
+-- initial -- 
+SELECT SYSDATE AS today_unformatted, TO_CHAR(SYSDATE, 'fmMM/DD/YYYY') AS today_formatted
+FROM Dual;
+
+
+-- QUESTION EIGHT --
+-- add in the info -- 
+SELECT 
+SYSDATE AS today_unformatted,  
+TO_CHAR(SYSDATE, 'fmMM/DD/YYYY') AS today_formatted, 
+25 AS Credits_Earned,
+(25/10) AS Stays_Earned, 
+FLOOR(25/10) AS Redeemable_stays, 
+ROUND(25/10) AS Next_Stay_to_earn
+FROM Dual;
+
+
+-- QUESTION NINE --
+
+SELECT customer_id, location_id, (check_out_date - check_in_date) AS length_of_stay
+FROM (SELECT * FROM Reservation WHERE location_id = 2 AND status = 'C')
+ORDER BY (check_out_date - check_in_date) DESC, customer_id 
+FETCH FIRST 20 ROWS ONLY;
+
+
+-- QUESTION TEN -- 
+
+SELECT first_name, 
+last_name, 
+confirmation_nbr, 
+date_created, 
+check_in_date, 
+check_out_date
+FROM Customer INNER JOIN Reservation ON Customer.customer_id = Reservation.customer_id
+WHERE status = 'C'
+ORDER BY Customer.customer_id, Reservation.check_out_date DESC;
+
+
+-- QUESTION ELEVEN -- 
+
+SELECT (c.first_name || ' ' || c.last_name) AS name, r.location_id, r.confirmation_nbr, r.check_in_date,ro.room_number
+FROM Customer c 
+      LEFT JOIN Reservation r 
+      ON c.customer_id = r.customer_id
+      LEFT JOIN Reservation_Details rd 
+      ON r.reservation_id = rd.reservation_id
+      LEFT JOIN Room ro 
+      ON rd.room_id = ro.room_id
+WHERE status = 'U' AND stay_credits_earned >= 40;
+
+
+-- QUESTION TWELVE --
+
+SELECT c.first_name, c.last_name, r.confirmation_nbr, r.date_created, r.check_in_date, r.check_out_date
+FROM Customer c 
+      LEFT JOIN reservation r on c.customer_id = r.customer_id
+WHERE r.customer_id is NULL; 
+
+
+-- QUESTION THIRTEEN -- 
+
+SELECT 
+'1-Gold Member' AS Status_level, first_name, last_name, email, stay_credits_earned
+FROM customer 
+WHERE stay_credits_earned <= 10 
+UNION 
+SELECT '2-Platinum Member' AS Status_level, first_name, last_name, email, stay_credits_earned
+FROM customer 
+WHERE stay_credits_earned BETWEEN 11 AND 40 
+UNION 
+SELECT '3-Diamond Member' AS Status_level, first_name, last_name, email, stay_credits_earned
+FROM customer 
+WHERE stay_credits_earned >= 40
+ORDER BY 1,3;
+
+
